@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
-import urllib.request, re, concurrent.futures, urllib.parse
+import concurrent.futures
+import re
+import urllib.parse
+import urllib.request
 from bs4 import BeautifulSoup
 
 CARD_URL_BASE = 'http://gatherer.wizards.com/Pages/Card/'
@@ -11,7 +14,9 @@ executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
 class Card():
 
     def __init__(self, url):
-
+        # get_from_gather will be called concurrently. The constructor
+        # returns but any attempt to access a property will block until
+        # the get_from_gatherer thread is finished
         def get_from_gatherer(url):
             with urllib.request.urlopen(url) as response:
                 soup = BeautifulSoup(response)
@@ -29,7 +34,7 @@ class Card():
                 self._toughness = _get_card_toughness(_card_div)
                 self._loyalty = _get_card_loyalty(_card_div)
                 self._assoc_card = _get_assoc_card(soup, _card_div)
-                
+
         self._future_fetch = executor.submit(get_from_gatherer, url)
 
     def __getattr__(self, name):
@@ -114,7 +119,7 @@ def _get_card_sets(rarities):
 
 def _get_card_name(card_div):
     return list(card_div.find_all('div', id=lambda x: x and 'nameRow' in x)[0].children)[3].string.strip()
-    
+
 def _get_card_text(card_div):
     text_search = card_div.find_all('div', id=lambda x: x and 'textRow' in x)
     card_text = ''
@@ -193,7 +198,7 @@ def _get_card_loyalty(card_div):
         if not '/' in pt_str:
             return pt_str.strip()
     return None
-    
+
 def _get_assoc_card(soup, main_card_div):
     card_containers = soup.find_all('td', {'class' : 'cardComponentContainer'})
     for card_div in card_containers:
@@ -221,20 +226,21 @@ def get_card_url_list(url_to_fetch):
     This function expects a 'Text Spoiler' URL as the only argument.
     This URL will be parsed and a list of all of the card URLs for this
     page will be returned as a list
-    
+
     Note that Unglued and Unhinged cards will cause unexpected behavior
     and should not be run through this method
     """
+    url_list = []
     with urllib.request.urlopen(url_to_fetch) as response:
         soup = BeautifulSoup(response)
-        url_list = []
         text_div = soup.find_all('div', {'class': 'textspoiler'})[0]
         for child in text_div.find_all('a'):
             url = urllib.parse.urljoin(url_to_fetch, child['href'])
+            # This is used to pick up cards like Akki Lavarunner
             if '(' in child.string:
                 url += '&part=' + urllib.parse.quote_plus(re.match('.*\((.*)\)\s*', child.string).group(1))
             url_list.append(url)
-        return url_list
+    return url_list
 
 cards = []
 for i, url in enumerate(get_card_url_list(CARD_LIST_URL)):
